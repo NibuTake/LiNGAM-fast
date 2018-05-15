@@ -12,12 +12,12 @@ from tqdm import tqdm
 Input:
     X:
         shape (n_samples, n_variables)
-        
+
     print_result:
         boolean value. if True, the result will be printed.
         ex.) x ---|strength|---> y
         x is the cause, y is the effect.
-    
+
     --Params for ICA--
     use_sklearn:
         boolean value. Choose negentropy(sklearn's FastICA) or kurtosis(default).
@@ -25,23 +25,23 @@ Input:
         numerical value. It is used for sklearn's FastICA(default=1000).
     max_iter:
         numerical value. It is used for ICA(default=1000).
-        
-    --Params for Regression-    
+
+    --Params for Regression-
     reg_type:
         string value. Choose linear(default) or lasso.
     criterion:
         string value. Choose aic or bic(default).
     max_iter_ls:
         numerical value. It is used for Lasso Regression(default=1000).
-        
-    --Params for verification--    
+
+    --Params for verification--
     shapiro:
-        boolean value. if True, the shapiro wilk test is done(default=False).  
-    
+        boolean value. if True, the shapiro wilk test is done(default=False).
+
     --Params for Algorithm--
     algorithm:
         string value. Choose normal or fast(default).
-    
+
 Output:
     the matrix of causal structure.
     x = Bx + e. B is return value
@@ -59,14 +59,14 @@ LiNGAM Estimation:
         Centerize and Whitening (X) and get [z,V].
     STEP2:
         Use (z), Estimate [W_z] using kurtosis base FastICA(Independent Component Analysis).
-        Å¶Note W_z will be estimated by each rows. Finally, Use Gram-Schmidt orthogonalization.
-        Å¶FastICA's Estimation can't identify "The correct row's order" and "Scale"
+        ‚ÄªNote W_z will be estimated by each rows. Finally, Use Gram-Schmidt orthogonalization.
+        ‚ÄªFastICA's Estimation can't identify "The correct row's order" and "Scale"
     STEP3:
         Use (W_z, inv(V)), estimate [A,PDW].
-        Å¶Note P is Permutation matrix, D is Diagonal matrix.
+        ‚ÄªNote P is Permutation matrix, D is Diagonal matrix.
     STEP4:
         Use [PDW] and acyclicity, estimate [P,D].
-        Å¶Note B=(I-W) and diag(B) is I because of Acyclisity.
+        ‚ÄªNote B=(I-W) and diag(B) is I because of Acyclisity.
     STEP5:
         Use [PDW,P,inv(D)], estimate [W_hat]
     STEP6:
@@ -98,13 +98,13 @@ class LiNGAM():
         self.reg_type = reg_type
         self.algorithm = algorithm
         X_np = self._pd2np(X)
-        
+
         self.X_center           = self._centerize(X_np)
         self.PDW                = self._calc_PDW(use_sklearn=use_sklearn)
         self.P_hat              = self._P_hat()
         self.D_hat,self.DW      = self._PW()
         self.B_hat              = self._B_hat()
-        
+
         # Branching by algorithm
         if self.algorithm == "normal" :
             self.P_dot          = self._P_dot()
@@ -115,13 +115,13 @@ class LiNGAM():
             self.B_prune        = results["B_hat"]
         else :
             return print("An avairable algorithm.")
-        
+
         self.B                  = self._regression_B(X_np)
         return self.B
 
     def b_hat_(self) :
         return self.B_hat
-    
+
     #if X is pandas DataFrame, convert numpy
     def _pd2np(self,X):
         if type(X) == pd.core.frame.DataFrame:
@@ -139,7 +139,7 @@ class LiNGAM():
     #whitening using Eigenvalue decomposition
     def _whitening(self,X):
         E, D, E_t = np.linalg.svd(np.cov(X, rowvar=0, bias=0), full_matrices=True)
-        ##ïœÇ¶Ç»Ç´Ç·Ç¢ÇØÇ»Ç¢
+        ##Â§â„Åà„Å™„Åç„ÇÉ„ÅÑ„Åë„Å™„ÅÑ
         D = np.diag(D**(-1/2))
         V = E.dot(D).dot(E_t) #whitening matrix
         return V.dot(X.T),V
@@ -198,7 +198,7 @@ class LiNGAM():
         for i in seq :
                 SubMatrix[i-1, matrix_key[i-1]-1] = 1
         return SubMatrix
-    
+
     #Estimate P (permute B by causal order)
     # This function required a lot of memory, so we redefine it by using _generate_SubMatrix.
     def _P_dot(self):
@@ -327,7 +327,7 @@ class LiNGAM():
     #---------------------------------------------------------------------
     # Fast estimate B and P.    2018/05/12
     #---------------------------------------------------------------------
-    
+
     # Decompose a matrix.
     # The matrix_ravel is the label.
     # The matrix_key is the value of matrix_ravel.
@@ -354,8 +354,8 @@ class LiNGAM():
         zero_matrix = np.zeros((dim, dim) , dtype=float).ravel()
         for i, k in enumerate(core_matrix["key"]) :
             zero_matrix[k] = core_matrix["matrix"][i]
-        return zero_matrix.reshape(dim,dim) 
-    
+        return zero_matrix.reshape(dim,dim)
+
     # Judge whether triangulation is possible or not.
     # If triangulation is possible, it returns the order, otherwise it returns a False as Boolean value.
     def _check_triangle(self, matrix):
@@ -370,7 +370,7 @@ class LiNGAM():
             return break_num
         else :
             return False
-    
+
     # Reduce dimention of matrix for break_num_list.
     def _dim_reduced_matrix(self, matrix, break_num_list):
         droped_matrix = matrix
@@ -383,8 +383,11 @@ class LiNGAM():
         dim = len(matrix)
         core_matrix = self._set_element_to_zero(self._pre_matrix(matrix)["matrix"], self._pre_matrix(matrix)["key"], int(dim*(dim+1)/2))
         reg_matrix = self._regenerate_matrix(core_matrix, dim)
-        causal_order = self._check_triangle(reg_matrix)
-        return {"causal_order":causal_order, "matrix": reg_matrix, "core_matrix": core_matrix}
+        while type(self._check_triangle(reg_matrix)) == bool:
+            core_matrix = self._set_element_to_zero(core_matrix["matrix"], core_matrix["key"], 1)
+            reg_matrix = self._regenerate_matrix(core_matrix, len(reg_matrix))
+        cause_order = self._check_triangle(reg_matrix)
+        return {"causal_order":cause_order, "matrix": reg_matrix, "core_matrix": core_matrix}
 
     # Run it recursively until it becomes triangularizable.
     def _droped_causal_order_matrix(self, core_matrix, dim, break_num_list=[]) :
@@ -422,12 +425,12 @@ class LiNGAM():
         for i, j in enumerate(cause):
             P_dot[i, j] = 1
         return P_dot
-    
+
     # Calculate B and P using the above all.
     def _fast_calc_B_hat_P_dot(self, x):
-        result1 = self.first_droped_causal_order_matrix(x) 
-        result2 = self._droped_causal_order_matrix(result1["core_matrix"], 
-                                                  dim=len(result1["matrix"]), 
+        result1 = self.first_droped_causal_order_matrix(x)
+        result2 = self._droped_causal_order_matrix(result1["core_matrix"],
+                                                  dim=len(result1["matrix"]),
                                                   break_num_list=[result1["causal_order"]])
         causal_order = self._reconstruct_causal_order(result2["causal_order"])
         return {"B_hat": result2["matrix"],
@@ -436,7 +439,7 @@ class LiNGAM():
 
     #print result
     def _result_print(self):
-        if self.print_result:           
+        if self.print_result:
             for i,b in enumerate(self.columns):
                 for j,a in enumerate(self.columns):
                     if self.B[i,j]!=0:
